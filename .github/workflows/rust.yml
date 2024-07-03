@@ -13,6 +13,8 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2.7.3
     - uses: actions/checkout@v4
     - name: install trunk
       run: cargo install --locked trunk
