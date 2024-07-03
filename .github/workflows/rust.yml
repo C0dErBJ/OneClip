@@ -36,7 +36,9 @@ jobs:
         run: rustup target add wasm32-unknown-unknown
       - name: setup cargo
         run: cargo install trunk tauri-cli
-      - name: build 
+      - name: trunk build
+        run: trunk build
+      - name: cargo build 
         run: cargo tauri build
 
       - name: install Rust stable
