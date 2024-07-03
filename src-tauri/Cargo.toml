@@ -1,0 +1,37 @@
+[package]
+name = "oneclip"
+version = "0.0.0"
+description = "A Tauri App"
+authors = ["you"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+tauri-build = { version = "1", features = [] }
+prost-build = "0.12.6"
+
+[dependencies]
+tauri = { version = "1", features = ["shell-open"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+netty-rs = "0.1.0"
+tokio = {version = "1.38", features = ["rt", "sync", "rt-multi-thread"] }
+rand = "0.8.5"
+futures = "0.3.30"
+tokio-test = "0.4.4"
+signal = "0.7.0"
+clipboard-rs = "0.1.7"
+chrono = "0.4.38"
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
+configparser = "3.1.0"
+prost = "0.12.6"
+bytes = "1.6.0"
+prost-stream = "0.1.2"
+md-5 = "0.10.6"
+
+
+[features]
+# This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]
