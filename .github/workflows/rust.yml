@@ -13,8 +13,16 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@v2.7.3
+    - name: Cache Crates
+      uses: actions/cache@v4.0.2
+      with:
+          path: |
+            ./target
+            ~/.cargo            
+          key: debug-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            debug-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}-
+            debug-${{ runner.os }}-         
     - uses: actions/checkout@v4
     - name: install trunk
       run: cargo install --locked trunk
