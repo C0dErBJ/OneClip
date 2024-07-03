@@ -29,7 +29,11 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
-
+      - uses: taiki-e/cache-cargo-install-action@v2
+        with:
+          tool: cargo-hack
+      - name: setup rust
+        run: rustup target add wasm32-unknown-unknown
       - name: setup cargo
         run: cargo install trunk tauri-cli
       - name: build 
