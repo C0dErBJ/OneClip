@@ -11,10 +11,11 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-
+    runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
+    - name: install trunk
+      run: cargo install --locked trunk
     - name: install dep
       run : cargo install tauri-cli
     - name: Build
