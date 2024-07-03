@@ -13,6 +13,7 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
+    - uses: actions/checkout@v4
     - name: Cache Crates
       uses: actions/cache@v4.0.2
       with:
@@ -23,7 +24,6 @@ jobs:
           restore-keys: |
             debug-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}-
             debug-${{ runner.os }}-         
-    - uses: actions/checkout@v4
     - name: install trunk
       run: cargo install --locked trunk
     - name: install dep
