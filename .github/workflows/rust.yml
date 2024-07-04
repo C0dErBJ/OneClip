@@ -31,7 +31,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: taiki-e/cache-cargo-install-action@v2
         with:
-          tool: cargo-hack,trunk,tauri-cli
+          tool: trunk
+      - uses: taiki-e/cache-cargo-install-action@v2
+        with:
+          tool: tauri-cli
       - name: install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04' # This must match the platform value defined above.
         run: |
