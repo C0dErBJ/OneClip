@@ -10,7 +10,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  publish-tauri:
+  release:
     permissions:
       contents: write
     strategy:
