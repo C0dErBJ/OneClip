@@ -45,6 +45,8 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
       - uses: taiki-e/cache-cargo-install-action@v2
         with:
           tool: trunk
