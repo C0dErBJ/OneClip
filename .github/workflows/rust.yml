@@ -41,25 +41,29 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
         # webkitgtk 4.0 is for Tauri v1 - webkitgtk 4.1 is for Tauri v2.
         # You can remove the one that doesn't apply to your app to speed up the workflow a bit.
-      - uses: taiki-e/cache-cargo-install-action@v2
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
         with:
-          tool: trunk
-      - uses: taiki-e/cache-cargo-install-action@v2
-        with:
-          tool: tauri-cli
-      - name: setup rust
-        run: rustup target add wasm32-unknown-unknown
-      - name: trunk build
-        run: trunk build
-      - name: cargo build 
-        run: cargo tauri build
-      # - uses: tauri-apps/tauri-action@v0
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          workspaces: './src-tauri -> target'
+      # - uses: taiki-e/cache-cargo-install-action@v2
       #   with:
-      #     tagName: app-v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
-      #     releaseName: 'App v__VERSION__'
-      #     releaseBody: 'See the assets to download this version and install.'
-      #     releaseDraft: true
-      #     prerelease: false
-      #     args: ${{ matrix.args }}
+      #     tool: trunk
+      # - uses: taiki-e/cache-cargo-install-action@v2
+      #   with:
+      #     tool: tauri-cli
+      # - name: setup rust
+      #   run: rustup target add wasm32-unknown-unknown
+      # - name: trunk build
+      #   run: trunk build
+      # - name: cargo build 
+      #   run: cargo tauri build
+      - name: Build the app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }} # This only works if your workflow triggers on new tags.
+          releaseName: 'App Name v__VERSION__' # tauri-action replaces \_\_VERSION\_\_ with the app version.
+          releaseBody: 'See the assets to download and install this version.'
+          releaseDraft: true
+          prerelease: false
