@@ -45,6 +45,11 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
+      - name: Protoc cache 
+        uses: actions/cache@v4.0.2
+        with:
+          path: /Users/runner/hostedtoolcache/protoc/
+          key: "protoc-${{ runner.os }}"
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
       - uses: taiki-e/cache-cargo-install-action@v2
