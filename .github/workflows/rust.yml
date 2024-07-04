@@ -45,9 +45,9 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
-      # - uses: taiki-e/cache-cargo-install-action@v2
-      #   with:
-      #     tool: trunk
+      - uses: taiki-e/cache-cargo-install-action@v2
+        with:
+          tool: trunk
       # - uses: taiki-e/cache-cargo-install-action@v2
       #   with:
       #     tool: tauri-cli
