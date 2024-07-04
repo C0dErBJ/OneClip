@@ -53,8 +53,8 @@ jobs:
       #     tool: tauri-cli
       # - name: setup rust
       #   run: rustup target add wasm32-unknown-unknown
-      # - name: trunk build
-      #   run: trunk build
+      - name: trunk build
+        run: trunk build
       # - name: cargo build 
       #   run: cargo tauri build
       - name: Build the app
