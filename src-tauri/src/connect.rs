@@ -1,7 +1,7 @@
 use crate::clip::clip_frame::{self, ClipFrame};
 use prost::Message;
 use std::io::Cursor;
-use tokio::io::Interest;
+use tokio::io::{self, AsyncReadExt, Interest};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
@@ -61,26 +61,47 @@ async fn socket_read(read: OwnedReadHalf, sender_read: broadcast::Sender<ClipFra
     loop {
         tracing::info!("socket接收线程开始");
         let ready = read.ready(Interest::READABLE).await.unwrap();
-        if ready.is_readable() {
-            let mut data = Vec::new();
-            match read.try_read_buf(&mut data) {
+        let mut full_data = Vec::new();
+        while ready.is_readable() {
+            let mut tmp_data = Vec::new();
+            match read.try_read_buf(&mut tmp_data) {
                 Ok(size) => {
                     if size == 0 {
                         tracing::info!("客户端断开链接");
                         break;
                     } else {
-                        tracing::info!("收到远端信息");
-                        match clip_frame::ClipFrame::decode(&mut Cursor::new(data)) {
-                            Ok(buf) => {
-                                let _ = sender_read.send(buf);
-                            }
-                            Err(_) => {
-                                tracing::warn!("远端消息解析有误");
-                            }
-                        }
+                        full_data.append(&mut tmp_data);
                     }
                 }
-                _ => {}
+                Err(e) => match e {
+                    WouldBlock => {
+                        tracing::info!("远端无数据，停止读取");
+                        break;
+                    }
+                    _ => {
+                        break;
+                    }
+                },
+            }
+        }
+        tracing::info!("准备解析，总计{}", full_data.len());
+        //这段转换正式使用可以去掉
+        let hex_string = String::from_utf8(full_data).unwrap();
+        let plain_bytes: Option<Vec<u8>> = (0..hex_string.len())
+            .step_by(2)
+            .map(|i| {
+                hex_string
+                    .get(i..i + 2)
+                    .and_then(|sub| u8::from_str_radix(sub, 16).ok())
+            })
+            .collect();
+        //这段转换正式使用可以去掉
+        match clip_frame::ClipFrame::decode(&mut Cursor::new(plain_bytes.unwrap())) {
+            Ok(buf) => {
+                let _ = sender_read.send(buf);
+            }
+            Err(e) => {
+                tracing::warn!("远端消息解析有误{}", e);
             }
         }
     }
@@ -97,9 +118,12 @@ async fn socket_write(write: OwnedWriteHalf, mut receiver: broadcast::Receiver<C
                     let mut buf = Vec::new();
                     buf.reserve(key.encoded_len());
                     key.encode(&mut buf).unwrap();
-                    match write.try_write(&buf) {
-                        Ok(_) => {
-                            tracing::info!("成功发送至对方")
+                    //这段转换正式使用可以去掉
+                    let hex_string = hex::encode(buf);
+                    //这段转换正式使用可以去掉
+                    match write.try_write(hex_string.as_bytes()) {
+                        Ok(size) => {
+                            tracing::info!("成功发送至对方，总计{}", size)
                         }
                         Err(_) => {}
                     }

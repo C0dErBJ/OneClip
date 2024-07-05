@@ -9,7 +9,6 @@
       "request": "launch",
       "name": "Tauri Development Debug",
       "env": {
-        "RUST_BACKTRACE": "1"
       },
       "cargo": {
         "args": [
