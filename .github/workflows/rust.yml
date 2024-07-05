@@ -52,6 +52,8 @@ jobs:
           key: "protoc-${{ runner.os }}"
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: taiki-e/cache-cargo-install-action@v2
         with:
           tool: trunk
