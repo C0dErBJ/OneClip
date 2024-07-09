@@ -1,10 +1,3 @@
-use std::{
-    fs::File,
-    io::{Read, Write},
-    path::Path,
-    sync::{Arc, Mutex},
-};
-
 use crate::clip::{self, clip_frame::ClipFrame};
 use base64::{
     alphabet::URL_SAFE,
@@ -15,31 +8,37 @@ use base64::{
 use clip_frame::clip_frame::Frametype;
 use clipboard_rs::{
     common::RustImageBuffer, Clipboard, ClipboardContext, ClipboardHandler, ClipboardWatcher,
-    ClipboardWatcherContext, ContentFormat,
+    ClipboardWatcherContext, ContentFormat, WatcherShutdown,
 };
-
-use encoding_rs::GBK;
-use md5::{Digest, Md5};
+use configparser::ini::Ini;
+use std::{
+    borrow::Borrow,
+    default,
+    fs::File,
+    io::{Read, Write},
+    path::Path,
+    sync::{Arc, Mutex},
+};
 use tauri::Url;
 use tokio::{sync::broadcast, task::JoinSet};
 use urlencoding::decode;
-
 pub mod clip_frame {
     include!(concat!(env!("OUT_DIR"), "/clip_frame.rs"));
 }
+
 struct Manager {
-    ctx: ClipboardContext,
-    sender: broadcast::Sender<ClipFrame>,
+    writer_sender: broadcast::Sender<ClipFrame>,
     remote_flag: Arc<Mutex<bool>>,
+    ctx: ClipboardContext,
 }
 
 impl Manager {
-    pub fn new(sender: broadcast::Sender<ClipFrame>, remote_flag: Arc<Mutex<bool>>) -> Self {
+    pub fn new(writer_sender: broadcast::Sender<ClipFrame>, remote_flag: Arc<Mutex<bool>>) -> Self {
         let ctx = ClipboardContext::new().unwrap();
         Manager {
-            ctx: ctx,
-            sender: sender,
-            remote_flag: remote_flag,
+            writer_sender,
+            remote_flag,
+            ctx,
         }
     }
 }
@@ -48,8 +47,8 @@ impl ClipboardHandler for Manager {
     fn on_clipboard_change(&mut self) {
         let mut flag = self.remote_flag.lock().unwrap();
         if !*flag {
-            let clip_frame = self.detect();
-            let ss: broadcast::Sender<ClipFrame> = self.sender.clone();
+            let clip_frame = self.clip_data_converter();
+            let ss: broadcast::Sender<ClipFrame> = self.writer_sender.clone();
             tokio::task::block_in_place(move || {
                 if clip_frame.content.len() == 0 {
                     tracing::info!("无识别内容");
@@ -63,11 +62,85 @@ impl ClipboardHandler for Manager {
         *flag = false;
     }
 }
-pub trait ClipboardTypeDetector {
-    fn detect(&self) -> ClipFrame;
+pub struct ClipboardChangeWatcher {
+    reader_sender: broadcast::Sender<ClipFrame>,
+    writer_sender: broadcast::Sender<ClipFrame>,
+    remote_flag: Arc<Mutex<bool>>,
+    temp_dir: String,
 }
-impl ClipboardTypeDetector for Manager {
-    fn detect(&self) -> ClipFrame {
+impl ClipboardChangeWatcher {
+    pub fn new(
+        reader_sender: broadcast::Sender<ClipFrame>,
+        writer_sender: broadcast::Sender<ClipFrame>,
+        temp_dir: String,
+    ) -> Self {
+        let remote_income_flag = Arc::new(Mutex::new(false));
+        ClipboardChangeWatcher {
+            reader_sender,
+            writer_sender,
+            remote_flag: remote_income_flag,
+            temp_dir,
+        }
+    }
+}
+pub trait ClipConverter {
+    fn remote_data_loader(ctx: ClipboardContext, clip_frame: ClipFrame);
+    fn clip_data_converter(&self) -> ClipFrame;
+}
+impl ClipConverter for Manager {
+    fn remote_data_loader(ctx: ClipboardContext, clip_frame: ClipFrame) {
+        match clip_frame.frame_type() {
+            Frametype::Text => {
+                let _ = ctx.set_buffer(
+                    clip_frame.clip_type.as_str(),
+                    clip_frame.content.get(0).unwrap().to_vec(),
+                );
+            }
+            Frametype::Html => {
+                let _ = ctx.set_buffer(
+                    clip_frame.clip_type.as_str(),
+                    clip_frame.content.get(0).unwrap().to_vec(),
+                );
+            }
+            Frametype::Rtf => {
+                let _ = ctx.set_rich_text(
+                    String::from_utf8(clip_frame.content.get(0).unwrap().to_vec()).unwrap(),
+                );
+            }
+            Frametype::Image => {
+                let _ = ctx.set_buffer(
+                    clip_frame.clip_type.as_str(),
+                    clip_frame.content.get(0).unwrap().to_vec(),
+                );
+            }
+            //todo
+            Frametype::Files => {
+                let mut local_files = Vec::new();
+                for file_num in 0..(clip_frame.content.len()) {
+                    let file_name =
+                        String::from_utf8(clip_frame.file_names.get(file_num).unwrap().to_vec())
+                            .unwrap();
+
+                    let file_path =
+                        Path::new("/Users/jialiangzhu/Downloads").join(file_name.clone());
+                    match File::create(file_path.to_str().unwrap()) {
+                        Ok(mut file) => {
+                            let _ = file.write_all(clip_frame.content.get(file_num).unwrap());
+                            local_files.push(file_path.to_str().unwrap().to_string());
+                        }
+                        Err(_) => {}
+                    };
+                }
+                if local_files.len() > 0 {
+                    let _ = ctx.set_files(local_files);
+                }
+            }
+            // todo
+            _ => {}
+        };
+    }
+
+    fn clip_data_converter(&self) -> ClipFrame {
         let mut clip_frame = ClipFrame::default();
         clip_frame.content = Vec::new();
         clip_frame.file_names = Vec::new();
@@ -157,61 +230,13 @@ impl ClipboardTypeDetector for Manager {
     }
 }
 
-fn convert_to_clip(ctx: ClipboardContext, clip_frame: ClipFrame) {
-    match clip_frame.frame_type() {
-        Frametype::Text => {
-            let _ = ctx.set_buffer(
-                clip_frame.clip_type.as_str(),
-                clip_frame.content.get(0).unwrap().to_vec(),
-            );
-        }
-        Frametype::Html => {
-            let _ = ctx.set_buffer(
-                clip_frame.clip_type.as_str(),
-                clip_frame.content.get(0).unwrap().to_vec(),
-            );
-        }
-        Frametype::Rtf => {
-            let _ = ctx.set_rich_text(
-                String::from_utf8(clip_frame.content.get(0).unwrap().to_vec()).unwrap(),
-            );
-        }
-        Frametype::Image => {
-            let _ = ctx.set_buffer(
-                clip_frame.clip_type.as_str(),
-                clip_frame.content.get(0).unwrap().to_vec(),
-            );
-        }
-        //todo
-        Frametype::Files => {
-            let mut local_files = Vec::new();
-            for file_num in 0..(clip_frame.content.len()) {
-                let file_name =
-                    String::from_utf8(clip_frame.file_names.get(file_num).unwrap().to_vec())
-                        .unwrap();
-
-                let file_path = Path::new("/Users/jialiangzhu/Downloads").join(file_name.clone());
-                match File::create(file_path.to_str().unwrap()) {
-                    Ok(mut file) => {
-                        let _ = file.write_all(clip_frame.content.get(file_num).unwrap());
-                        local_files.push(file_path.to_str().unwrap().to_string());
-                    }
-                    Err(_) => {}
-                };
-            }
-            if local_files.len() > 0 {
-                let _ = ctx.set_files(local_files);
-            }
-        }
-        // todo
-        _ => {}
-    };
-}
-
-async fn clip_change_watcher(sender: broadcast::Sender<ClipFrame>, remote_flag: Arc<Mutex<bool>>) {
+async fn local_clip_change_watcher(
+    writer_sender: broadcast::Sender<ClipFrame>,
+    remote_flag: Arc<Mutex<bool>>,
+) {
     tracing::info!("设置剪贴板监听");
-    let manager = Manager::new(sender, remote_flag);
-    let mut watcher = ClipboardWatcherContext::new().unwrap();
+    let manager = Manager::new(writer_sender, remote_flag);
+    let mut watcher: ClipboardWatcherContext<Manager> = ClipboardWatcherContext::new().unwrap();
     let _shutdown = watcher.add_handler(manager).get_shutdown_channel();
     watcher.start_watch();
     tracing::warn!("设置剪贴板监听结束");
@@ -231,21 +256,31 @@ async fn remote_clip_change_watcher(
                 //信号量控制剪贴板更新，确保不重复更新
                 let mut flag = remote_flag.lock().unwrap();
                 *flag = true;
-                convert_to_clip(ctx, key);
+                Manager::remote_data_loader(ctx, key);
             }
             _ => {}
         }
     }
 }
-
-pub async fn start_clip(
-    sender: broadcast::Sender<ClipFrame>,
-    receiver: broadcast::Receiver<ClipFrame>,
-    remote_flag: Arc<Mutex<bool>>,
-) {
+pub fn setup(
+    config: &'static Ini,
+    reader_sender: broadcast::Sender<ClipFrame>,
+    writer_sender: broadcast::Sender<ClipFrame>,
+) -> ClipboardChangeWatcher {
+    let dir = config.get("default", "default_tmp_dir").unwrap();
+    ClipboardChangeWatcher::new(reader_sender, writer_sender.clone(), dir)
+}
+pub async fn start(watcher: ClipboardChangeWatcher) {
     let mut set = JoinSet::new();
-    set.spawn(clip_change_watcher(sender, remote_flag.clone()));
-    set.spawn(remote_clip_change_watcher(receiver, remote_flag));
+    set.spawn(local_clip_change_watcher(
+        watcher.writer_sender,
+        watcher.remote_flag.clone(),
+    ));
+
+    set.spawn(remote_clip_change_watcher(
+        watcher.reader_sender.subscribe(),
+        watcher.remote_flag,
+    ));
     while let Some(res) = set.join_next().await {
         let _ = res.unwrap();
     }

@@ -1,13 +1,22 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::sync::{atomic::AtomicBool, Arc, Mutex};
+use std::{
+    path::PathBuf,
+    sync::{atomic::AtomicBool, Arc, Mutex},
+};
 
 use clip::clip_frame::ClipFrame;
+use config::{init_config, CONFIG};
 use configparser::ini::Ini;
+use connect::{RWChannel, RemoteConnecter};
+use tauri::{
+    CustomMenuItem, Menu, MenuItem, Submenu, SystemTray, SystemTrayMenu, SystemTrayMenuItem,
+};
 use tokio::{sync::broadcast, task::JoinSet};
 
 pub mod clip;
+pub mod config;
 pub mod connect;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -18,7 +27,19 @@ fn greet(name: &str) -> String {
 }
 
 fn main() {
+    //加载日志
+    tracing_subscriber::registry().with(fmt::layer()).init();
+    //加载日志
+    let quit = CustomMenuItem::new("quit".to_string(), "Quit");
+    let hide = CustomMenuItem::new("hide".to_string(), "Hide");
+    let tray_menu = SystemTrayMenu::new()
+        .add_item(quit)
+        .add_native_item(SystemTrayMenuItem::Separator)
+        .add_item(hide);
+    let tray = SystemTray::new().with_menu(tray_menu);
+
     tauri::Builder::default()
+        .system_tray(tray)
         .setup(|app| {
             let resource_path = app
                 .path_resolver()
@@ -27,34 +48,20 @@ fn main() {
 
             tauri::async_runtime::spawn(async move {
                 //初始化日志
-                tracing_subscriber::registry().with(fmt::layer()).init();
-
-                let (tx_read, mut rx_read) = broadcast::channel::<ClipFrame>(20);
+                tracing::info!("初始化线程开始");
+                unsafe { init_config(resource_path) }
+                let (tx_read, _) = broadcast::channel::<ClipFrame>(20);
                 let (tx_write, _) = broadcast::channel::<ClipFrame>(20);
-                let remote_income_flag = Arc::new(Mutex::new(false));
-                let mut config = Ini::new();
-                let _config_map = config.load(resource_path).unwrap();
+                let config = unsafe { CONFIG.as_ref().unwrap() };
+                let connector = connect::setup(config, tx_read.clone(), tx_write.clone());
+                let clip_watcher = clip::setup(config, tx_read, tx_write);
+                //初始化时，先做一次链接
+                tokio::select! {
+                    _=connect::start(connector, String::from("client"))=>{}
+                    _=clip::start(clip_watcher)=>{}
+                }
 
-                let mut set = JoinSet::new();
-                let mode = config.get("基础设置", "mode").unwrap();
-                if mode == "client" {
-                    set.spawn(connect::do_client(
-                        String::from(config.get("基础设置", "server_ip").unwrap()),
-                        tx_read,
-                        tx_write.clone(),
-                    ));
-                } else {
-                    set.spawn(connect::do_server(
-                        String::from(config.get("基础设置", "host_port").unwrap()),
-                        tx_read,
-                        tx_write.clone(),
-                    ));
-                }
-                set.spawn(clip::start_clip(tx_write, rx_read, remote_income_flag));
-                while let Some(res) = set.join_next().await {
-                    let _ = res.unwrap();
-                }
-                tracing::info!("all done");
+                tracing::info!("初始化线程结束");
             });
 
             Ok(())

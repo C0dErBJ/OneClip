@@ -12,7 +12,7 @@ tauri-build = { version = "1", features = [] }
 prost-build = "0.12.6"
 
 [dependencies]
-tauri = { version = "1", features = ["shell-open"] }
+tauri = { version = "1", features = ["shell-open","system-tray"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 netty-rs = "0.1.0"
