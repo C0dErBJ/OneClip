@@ -1,19 +1,14 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::{
-    path::PathBuf,
-    sync::{atomic::AtomicBool, Arc, Mutex},
-};
-
+use std::sync::{atomic::AtomicBool, Arc, Mutex};
 use clip::clip_frame::ClipFrame;
 use config::{init_config, CONFIG};
-use configparser::ini::Ini;
 use connect::{RWChannel, RemoteConnecter};
 use tauri::{
     CustomMenuItem, Menu, MenuItem, Submenu, SystemTray, SystemTrayMenu, SystemTrayMenuItem,
 };
-use tokio::{sync::broadcast, task::JoinSet};
+use tokio::sync::broadcast;
 
 pub mod clip;
 pub mod config;
@@ -29,6 +24,8 @@ fn greet(name: &str) -> String {
     return format!("Hello, {}! You've been greeted from Rust!", name);
 }
 fn init_log() {
+    let env_filter = tracing_subscriber::filter::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::filter::EnvFilter::new("info"));
     // 输出到控制台中
     let formatting_layer = fmt::layer().pretty().with_writer(std::io::stderr);
     // 输出到文件中
@@ -40,10 +37,12 @@ fn init_log() {
 
     // 注册
     Registry::default()
+        .with(env_filter)
         .with(ErrorLayer::default())
         .with(formatting_layer)
         .with(file_layer)
         .init();
+    color_eyre::install();
 }
 fn main() {
     //加载日志
