@@ -175,6 +175,7 @@ impl ClipConverter for Manager {
             clip_frame.content_num = 1;
         } else if self.ctx.has(ContentFormat::Image) {
             clip_frame.set_frame_type(Frametype::Image);
+            clip_frame.clip_type = "public.png".to_string();
             let img = self.ctx.get_image().unwrap();
             let mut buffer = img.to_png().unwrap().get_bytes().to_vec();
             clip_frame.content.push(buffer);
