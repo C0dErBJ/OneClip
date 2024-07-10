@@ -1,10 +1,6 @@
 use crate::clip::{self, clip_frame::ClipFrame};
-use base64::{
-    alphabet::URL_SAFE,
-    engine::{self, general_purpose},
-    prelude::BASE64_STANDARD,
-    Engine,
-};
+use base64::prelude::*;
+
 use clip_frame::clip_frame::Frametype;
 use clipboard_rs::{
     common::{RustImage, RustImageBuffer},
@@ -92,36 +88,33 @@ impl ClipConverter for Manager {
     fn remote_data_loader(ctx: ClipboardContext, clip_frame: ClipFrame, tmp_dir: String) {
         match clip_frame.frame_type() {
             Frametype::Text => {
-                let _ = ctx.set_text(
-                    String::from_utf8(clip_frame.content.get(0).unwrap().to_vec()).unwrap(),
-                );
+                let _ = ctx.set_text(clip_frame.content.get(0).unwrap().to_string());
             }
             Frametype::Html => {
-                let _ = ctx.set_html(
-                    String::from_utf8(clip_frame.content.get(0).unwrap().to_vec()).unwrap(),
-                );
+                let _ = ctx.set_html(clip_frame.content.get(0).unwrap().to_string());
             }
             Frametype::Rtf => {
-                let _ = ctx.set_rich_text(
-                    String::from_utf8(clip_frame.content.get(0).unwrap().to_vec()).unwrap(),
-                );
+                let _ = ctx.set_rich_text(clip_frame.content.get(0).unwrap().to_string());
             }
             Frametype::Image => {
-                let img = RustImage::from_bytes(clip_frame.content.get(0).unwrap());
+                let plain = BASE64_STANDARD
+                    .decode(clip_frame.content.get(0).unwrap())
+                    .unwrap();
+                let img = RustImage::from_bytes(&plain);
                 let _ = ctx.set_image(img.unwrap());
             }
             //todo
             Frametype::Files => {
                 let mut local_files = Vec::new();
                 for file_num in 0..(clip_frame.content.len()) {
-                    let file_name =
-                        String::from_utf8(clip_frame.file_names.get(file_num).unwrap().to_vec())
-                            .unwrap();
-
+                    let file_name = clip_frame.file_names.get(file_num).unwrap();
                     let file_path = Path::new(tmp_dir.as_str()).join(file_name.clone());
                     match File::create(file_path.to_str().unwrap()) {
                         Ok(mut file) => {
-                            let _ = file.write_all(clip_frame.content.get(file_num).unwrap());
+                            let plain = BASE64_STANDARD
+                                .decode(clip_frame.content.get(file_num).unwrap())
+                                .unwrap();
+                            let _ = file.write_all(&plain);
                             local_files.push(file_path.to_str().unwrap().to_string());
                         }
                         Err(_) => {}
@@ -151,13 +144,13 @@ impl ClipConverter for Manager {
                     for file_path in files {
                         let plain_path = decode(file_path.as_str()).unwrap().to_string();
                         let file = Path::new(&plain_path);
-                        let filename = file.file_name().unwrap().as_encoded_bytes().to_vec();
-                        clip_frame.file_names.push(filename);
+                        let file_name = file.file_name().unwrap().to_str().unwrap();
+                        clip_frame.file_names.push(String::from(file_name));
                         match File::open(plain_path.replace("file://", "")) {
                             Ok(mut fs) => {
                                 let mut buf = Vec::new();
                                 let _ = fs.read_to_end(&mut buf).unwrap();
-                                clip_frame.content.push(buf);
+                                clip_frame.content.push(BASE64_STANDARD.encode(buf));
                             }
                             Err(e) => {
                                 tracing::error!("文件读取失败[{}]", e);
@@ -170,29 +163,26 @@ impl ClipConverter for Manager {
         } else if self.ctx.has(ContentFormat::Html) {
             clip_frame.set_frame_type(Frametype::Html);
             clip_frame.clip_type = "public.utf8-plain-text".to_string();
-            let buffer = self.ctx.get_html().unwrap();
-            clip_frame.content.push(buffer.as_bytes().to_vec());
+            clip_frame.content.push(self.ctx.get_html().unwrap());
             clip_frame.content_num = 1;
         } else if self.ctx.has(ContentFormat::Image) {
             clip_frame.set_frame_type(Frametype::Image);
             clip_frame.clip_type = "public.png".to_string();
             let img = self.ctx.get_image().unwrap();
             let mut buffer = img.to_png().unwrap().get_bytes().to_vec();
-            clip_frame.content.push(buffer);
+            clip_frame.content.push(BASE64_STANDARD.encode(buffer));
             clip_frame.content_num = 1;
         } else if self.ctx.has(ContentFormat::Rtf) {
             //富文本
             clip_frame.set_frame_type(Frametype::Rtf);
             clip_frame.clip_type = "public.rtf".to_string();
-            let buffer = self.ctx.get_rich_text().unwrap();
-            clip_frame.content.push(buffer.as_bytes().to_vec());
+            clip_frame.content.push(self.ctx.get_rich_text().unwrap());
             clip_frame.content_num = 1;
         } else {
             //普通文本
             clip_frame.set_frame_type(Frametype::Text);
             clip_frame.clip_type = "public.utf8-plain-text".to_string();
-            let buffer = self.ctx.get_text().unwrap();
-            clip_frame.content.push(buffer.as_bytes().to_vec());
+            clip_frame.content.push(self.ctx.get_text().unwrap());
             clip_frame.content_num = 1;
         }
         clip_frame

@@ -13,7 +13,7 @@ enum Frametype {
   }
   Frametype frame_type = 1;
   int32 content_num=2;
-  repeated bytes content=3;
-  repeated bytes file_names=4;
+  repeated string content=3;
+  repeated string file_names=4;
   string clip_type=5;
 }

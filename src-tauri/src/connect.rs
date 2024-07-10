@@ -254,8 +254,9 @@ pub async fn do_client(
 }
 
 async fn socket_read(read: OwnedReadHalf, sender_read: broadcast::Sender<ClipFrame>) {
-    loop {
-        tracing::info!("socket接收线程开始");
+    tracing::info!("socket接收线程开始");
+    let mut is_connect = true;
+    while is_connect {
         let ready = read.ready(Interest::READABLE).await.unwrap();
         let mut full_data = Vec::new();
         while ready.is_readable() {
@@ -264,13 +265,14 @@ async fn socket_read(read: OwnedReadHalf, sender_read: broadcast::Sender<ClipFra
                 Ok(size) => {
                     if size == 0 {
                         tracing::info!("客户端断开链接");
+                        is_connect = false;
                         break;
                     } else {
                         full_data.append(&mut tmp_data);
                     }
                 }
                 Err(e) => match e {
-                    WouldBlock => {
+                    _WouldBlock => {
                         tracing::info!("远端无数据，停止读取");
                         break;
                     }
@@ -279,6 +281,9 @@ async fn socket_read(read: OwnedReadHalf, sender_read: broadcast::Sender<ClipFra
                     }
                 },
             }
+        }
+        if !is_connect {
+            break;
         }
         tracing::info!("准备解析，总计{}", full_data.len());
         //这段转换正式使用可以去掉
@@ -301,6 +306,7 @@ async fn socket_read(read: OwnedReadHalf, sender_read: broadcast::Sender<ClipFra
             }
         }
     }
+    tracing::info!("socket接收线程结束");
 }
 async fn socket_write(write: OwnedWriteHalf, mut receiver: broadcast::Receiver<ClipFrame>) {
     tracing::info!("socket发送线程开始");
@@ -346,8 +352,7 @@ pub async fn start(connector: RemoteConnecter, mode: String) {
         let mut config_changer = unsafe { FILE_WATCHER.as_ref().unwrap().subscribe() };
         match config_changer.changed().await {
             Ok(a) => {
-               // let config = config_changer.borrow();
-                
+                // let config = config_changer.borrow();
             }
             Err(_) => {}
         }
