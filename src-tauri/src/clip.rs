@@ -7,8 +7,9 @@ use base64::{
 };
 use clip_frame::clip_frame::Frametype;
 use clipboard_rs::{
-    common::RustImageBuffer, Clipboard, ClipboardContext, ClipboardHandler, ClipboardWatcher,
-    ClipboardWatcherContext, ContentFormat, WatcherShutdown,
+    common::{RustImage, RustImageBuffer},
+    Clipboard, ClipboardContext, ClipboardHandler, ClipboardWatcher, ClipboardWatcherContext,
+    ContentFormat, RustImageData, WatcherShutdown,
 };
 use configparser::ini::Ini;
 use std::{
@@ -66,40 +67,38 @@ pub struct ClipboardChangeWatcher {
     reader_sender: broadcast::Sender<ClipFrame>,
     writer_sender: broadcast::Sender<ClipFrame>,
     remote_flag: Arc<Mutex<bool>>,
-    temp_dir: String,
+    tmp_dir: String,
 }
 impl ClipboardChangeWatcher {
     pub fn new(
         reader_sender: broadcast::Sender<ClipFrame>,
         writer_sender: broadcast::Sender<ClipFrame>,
-        temp_dir: String,
+        tmp_dir: String,
     ) -> Self {
         let remote_income_flag = Arc::new(Mutex::new(false));
         ClipboardChangeWatcher {
             reader_sender,
             writer_sender,
             remote_flag: remote_income_flag,
-            temp_dir,
+            tmp_dir,
         }
     }
 }
 pub trait ClipConverter {
-    fn remote_data_loader(ctx: ClipboardContext, clip_frame: ClipFrame);
+    fn remote_data_loader(ctx: ClipboardContext, clip_frame: ClipFrame, tmp_dir: String);
     fn clip_data_converter(&self) -> ClipFrame;
 }
 impl ClipConverter for Manager {
-    fn remote_data_loader(ctx: ClipboardContext, clip_frame: ClipFrame) {
+    fn remote_data_loader(ctx: ClipboardContext, clip_frame: ClipFrame, tmp_dir: String) {
         match clip_frame.frame_type() {
             Frametype::Text => {
-                let _ = ctx.set_buffer(
-                    clip_frame.clip_type.as_str(),
-                    clip_frame.content.get(0).unwrap().to_vec(),
+                let _ = ctx.set_text(
+                    String::from_utf8(clip_frame.content.get(0).unwrap().to_vec()).unwrap(),
                 );
             }
             Frametype::Html => {
-                let _ = ctx.set_buffer(
-                    clip_frame.clip_type.as_str(),
-                    clip_frame.content.get(0).unwrap().to_vec(),
+                let _ = ctx.set_html(
+                    String::from_utf8(clip_frame.content.get(0).unwrap().to_vec()).unwrap(),
                 );
             }
             Frametype::Rtf => {
@@ -108,10 +107,8 @@ impl ClipConverter for Manager {
                 );
             }
             Frametype::Image => {
-                let _ = ctx.set_buffer(
-                    clip_frame.clip_type.as_str(),
-                    clip_frame.content.get(0).unwrap().to_vec(),
-                );
+                let img = RustImage::from_bytes(clip_frame.content.get(0).unwrap());
+                let _ = ctx.set_image(img.unwrap());
             }
             //todo
             Frametype::Files => {
@@ -121,8 +118,7 @@ impl ClipConverter for Manager {
                         String::from_utf8(clip_frame.file_names.get(file_num).unwrap().to_vec())
                             .unwrap();
 
-                    let file_path =
-                        Path::new("/Users/jialiangzhu/Downloads").join(file_name.clone());
+                    let file_path = Path::new(tmp_dir.as_str()).join(file_name.clone());
                     match File::create(file_path.to_str().unwrap()) {
                         Ok(mut file) => {
                             let _ = file.write_all(clip_frame.content.get(file_num).unwrap());
@@ -245,6 +241,7 @@ async fn local_clip_change_watcher(
 async fn remote_clip_change_watcher(
     mut receiver: broadcast::Receiver<ClipFrame>,
     remote_flag: Arc<Mutex<bool>>,
+    tmp_dir: String,
 ) {
     tracing::info!("设置剪贴板更新");
     loop {
@@ -256,7 +253,7 @@ async fn remote_clip_change_watcher(
                 //信号量控制剪贴板更新，确保不重复更新
                 let mut flag = remote_flag.lock().unwrap();
                 *flag = true;
-                Manager::remote_data_loader(ctx, key);
+                Manager::remote_data_loader(ctx, key, tmp_dir.clone());
             }
             _ => {}
         }
@@ -280,6 +277,7 @@ pub async fn start(watcher: ClipboardChangeWatcher) {
     set.spawn(remote_clip_change_watcher(
         watcher.reader_sender.subscribe(),
         watcher.remote_flag,
+        watcher.tmp_dir,
     ));
     while let Some(res) = set.join_next().await {
         let _ = res.unwrap();
