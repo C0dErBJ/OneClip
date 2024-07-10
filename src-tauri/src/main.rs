@@ -1,12 +1,15 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::sync::{atomic::AtomicBool, Arc, Mutex};
 use clip::clip_frame::ClipFrame;
 use config::{init_config, CONFIG};
 use connect::{RWChannel, RemoteConnecter};
+use std::{
+    path::PathBuf,
+    sync::{atomic::AtomicBool, Arc, Mutex},
+};
 use tauri::{
-    CustomMenuItem, Menu, MenuItem, Submenu, SystemTray, SystemTrayMenu, SystemTrayMenuItem,
+    CustomMenuItem, Menu, MenuItem, Submenu, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem
 };
 use tokio::sync::broadcast;
 
@@ -44,15 +47,19 @@ fn init_log() {
         .init();
     color_eyre::install();
 }
+
 fn main() {
     //加载日志
     init_log();
-    let quit = CustomMenuItem::new("quit".to_string(), "Quit");
+    let server = CustomMenuItem::new("server".to_string(), "开启服务");
     let hide = CustomMenuItem::new("hide".to_string(), "Hide");
+    let quit = CustomMenuItem::new("quit".to_string(), "Quit");
     let tray_menu = SystemTrayMenu::new()
-        .add_item(quit)
+        .add_item(server)
+        .add_item(hide)
         .add_native_item(SystemTrayMenuItem::Separator)
-        .add_item(hide);
+        .add_item(quit);
+
     let tray = SystemTray::new().with_menu(tray_menu);
 
     tauri::Builder::default()
@@ -62,7 +69,6 @@ fn main() {
                 .path_resolver()
                 .resolve_resource("config/config.ini")
                 .expect("failed to resolve resource");
-
             tauri::async_runtime::spawn(async move {
                 //初始化日志
                 tracing::info!("初始化线程开始");
@@ -80,8 +86,36 @@ fn main() {
 
                 tracing::info!("初始化线程结束");
             });
-
             Ok(())
+        })
+        .on_system_tray_event(|handler, event| match event {
+            SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
+                "quit" => {
+                    std::process::exit(0);
+                }
+                "server" => {
+                    tauri::async_runtime::spawn(async move {
+                        tracing::info!("开始服务");
+                        let (tx_read, _) = broadcast::channel::<ClipFrame>(20);
+                        let (tx_write, _) = broadcast::channel::<ClipFrame>(20);
+                        let config = unsafe { CONFIG.as_ref().unwrap() };
+                        let connector = connect::setup(config, tx_read.clone(), tx_write.clone());
+                        let clip_watcher = clip::setup(config, tx_read, tx_write);
+                        tokio::select! {
+                            _=connect::start(connector, config.get("default", "mode").unwrap())=>{}
+                            _=clip::start(clip_watcher)=>{}
+                        }
+
+                        tracing::info!("服务结束");
+                    });
+                }
+                _ => {
+                    tracing::info!("点击事件");
+                }
+            },
+            _ => {
+                tracing::info!("托盘事件");
+            }
         })
         .invoke_handler(tauri::generate_handler![greet])
         .run(tauri::generate_context!())
