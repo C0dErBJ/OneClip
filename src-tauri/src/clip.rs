@@ -140,8 +140,7 @@ impl ClipConverter for Manager {
         let mut clip_frame = ClipFrame::default();
         clip_frame.content = Vec::new();
         clip_frame.file_names = Vec::new();
-        let types = self.ctx.available_formats().unwrap();
-        if types.contains(&String::from("public.file-url")) {
+        if self.ctx.has(ContentFormat::Files) {
             //判断为文件
             clip_frame.set_frame_type(Frametype::Files);
             clip_frame.clip_type = "public.file-url".to_string();
@@ -168,58 +167,31 @@ impl ClipConverter for Manager {
                 }
                 Err(_) => {}
             }
-        } else if types.contains(&String::from("public.html"))
-            || types.contains(&String::from("public.utf8-plain-text"))
-        {
+        } else if self.ctx.has(ContentFormat::Html) {
             clip_frame.set_frame_type(Frametype::Html);
             clip_frame.clip_type = "public.utf8-plain-text".to_string();
-            let buffer = self.ctx.get_buffer("public.utf8-plain-text").unwrap();
-            clip_frame.content.push(buffer);
+            let buffer = self.ctx.get_html().unwrap();
+            clip_frame.content.push(buffer.as_bytes().to_vec());
             clip_frame.content_num = 1;
-            //html文本
-        } else if types.contains(&String::from("public.png"))
-            || types.contains(&String::from("public.jpg"))
-            || types.contains(&String::from("public.bmp"))
-        {
-            let mut buffer = Vec::new();
+        } else if self.ctx.has(ContentFormat::Image) {
             clip_frame.set_frame_type(Frametype::Image);
-            match self.ctx.get_buffer("public.png") {
-                Ok(rs) => {
-                    buffer = rs;
-                    clip_frame.clip_type = "public.png".to_string();
-                }
-                Err(_) => match self.ctx.get_buffer("public.jpg") {
-                    Ok(rs) => {
-                        buffer = rs;
-                        clip_frame.clip_type = "public.jpg".to_string();
-                    }
-                    Err(_) => match self.ctx.get_buffer("public.bmp") {
-                        Ok(rs) => {
-                            buffer = rs;
-                            clip_frame.clip_type = "public.bmp".to_string();
-                        }
-                        Err(_) => {}
-                    },
-                },
-            };
+            let img = self.ctx.get_image().unwrap();
+            let mut buffer = img.to_png().unwrap().get_bytes().to_vec();
             clip_frame.content.push(buffer);
             clip_frame.content_num = 1;
-            //图片
-        } else if types.contains(&String::from("public.rtf"))
-            || types.contains(&String::from("public.utf8-plain-text"))
-        {
+        } else if self.ctx.has(ContentFormat::Rtf) {
             //富文本
             clip_frame.set_frame_type(Frametype::Rtf);
             clip_frame.clip_type = "public.rtf".to_string();
-            let buffer = self.ctx.get_buffer("public.rtf").unwrap();
-            clip_frame.content.push(buffer);
+            let buffer = self.ctx.get_rich_text().unwrap();
+            clip_frame.content.push(buffer.as_bytes().to_vec());
             clip_frame.content_num = 1;
         } else {
             //普通文本
             clip_frame.set_frame_type(Frametype::Text);
             clip_frame.clip_type = "public.utf8-plain-text".to_string();
-            let buffer = self.ctx.get_buffer("public.utf8-plain-text").unwrap();
-            clip_frame.content.push(buffer);
+            let buffer = self.ctx.get_text().unwrap();
+            clip_frame.content.push(buffer.as_bytes().to_vec());
             clip_frame.content_num = 1;
         }
         clip_frame
