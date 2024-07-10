@@ -91,10 +91,10 @@ impl ClipConverter for Manager {
                 let _ = ctx.set_text(clip_frame.content.get(0).unwrap().to_string());
             }
             Frametype::Html => {
-                let _ = ctx.set_html(clip_frame.content.get(0).unwrap().to_string());
+                let _ = ctx.set_text(clip_frame.content.get(0).unwrap().to_string());
             }
             Frametype::Rtf => {
-                let _ = ctx.set_rich_text(clip_frame.content.get(0).unwrap().to_string());
+                let _ = ctx.set_text(clip_frame.content.get(0).unwrap().to_string());
             }
             Frametype::Image => {
                 let plain = BASE64_STANDARD
@@ -163,7 +163,7 @@ impl ClipConverter for Manager {
         } else if self.ctx.has(ContentFormat::Html) {
             clip_frame.set_frame_type(Frametype::Html);
             clip_frame.clip_type = "public.utf8-plain-text".to_string();
-            clip_frame.content.push(self.ctx.get_html().unwrap());
+            clip_frame.content.push(self.ctx.get_text().unwrap());
             clip_frame.content_num = 1;
         } else if self.ctx.has(ContentFormat::Image) {
             clip_frame.set_frame_type(Frametype::Image);
@@ -176,7 +176,7 @@ impl ClipConverter for Manager {
             //富文本
             clip_frame.set_frame_type(Frametype::Rtf);
             clip_frame.clip_type = "public.rtf".to_string();
-            clip_frame.content.push(self.ctx.get_rich_text().unwrap());
+            clip_frame.content.push(self.ctx.get_text().unwrap());
             clip_frame.content_num = 1;
         } else {
             //普通文本
