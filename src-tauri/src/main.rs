@@ -3,14 +3,7 @@
 
 use clip::clip_frame::ClipFrame;
 use config::{init_config, CONFIG};
-use connect::{RWChannel, RemoteConnecter};
-use std::{
-    path::PathBuf,
-    sync::{atomic::AtomicBool, Arc, Mutex},
-};
-use tauri::{
-    CustomMenuItem, Menu, MenuItem, Submenu, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem
-};
+use tauri::{CustomMenuItem, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem};
 use tokio::sync::broadcast;
 
 pub mod clip;
@@ -45,7 +38,7 @@ fn init_log() {
         .with(formatting_layer)
         .with(file_layer)
         .init();
-    color_eyre::install();
+    let _ = color_eyre::install();
 }
 
 fn main() {
@@ -88,7 +81,7 @@ fn main() {
             });
             Ok(())
         })
-        .on_system_tray_event(|handler, event| match event {
+        .on_system_tray_event(|_, event| match event {
             SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
                 "quit" => {
                     std::process::exit(0);

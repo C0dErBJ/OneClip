@@ -1,22 +1,18 @@
-use crate::clip::{self, clip_frame::ClipFrame};
+use crate::clip::clip_frame::ClipFrame;
 use base64::prelude::*;
 
 use clip_frame::clip_frame::Frametype;
 use clipboard_rs::{
-    common::{RustImage, RustImageBuffer},
-    Clipboard, ClipboardContext, ClipboardHandler, ClipboardWatcher, ClipboardWatcherContext,
-    ContentFormat, RustImageData, WatcherShutdown,
+    common::RustImage, Clipboard, ClipboardContext, ClipboardHandler, ClipboardWatcher,
+    ClipboardWatcherContext, ContentFormat,
 };
 use configparser::ini::Ini;
 use std::{
-    borrow::Borrow,
-    default,
     fs::File,
     io::{Read, Write},
     path::Path,
     sync::{Arc, Mutex},
 };
-use tauri::Url;
 use tokio::{sync::broadcast, task::JoinSet};
 use urlencoding::decode;
 pub mod clip_frame {
